@@ -1,0 +1,18 @@
+services:
+  mailrise:
+    image: docker.io/yoryan/mailrise:latest
+    container_name: "mailrise"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    volumes:
+      - "{{ config_mailrise_file_path }}:/etc/mailrise.conf:ro"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    ports:
+      - 127.0.0.1:8025:8025

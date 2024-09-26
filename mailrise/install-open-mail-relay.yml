@@ -1,0 +1,21 @@
+---
+- name: Install open-mail-relay package
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - bsd-mailx
+  when: item not in ansible_facts.packages
+
+- name: Configure postfix to use local SMTP Server
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    state: present
+    regexp: ^relayhost
+    line: relayhost = [127.0.0.1]:8025
+
+- name: Ensure the mail service is restarted
+  ansible.builtin.service:
+    name: postfix
+    state: restarted
+    enabled: true
