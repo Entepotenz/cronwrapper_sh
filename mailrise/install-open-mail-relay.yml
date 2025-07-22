@@ -1,21 +1,59 @@
 ---
+- name: Set Postfix configuration - main_mailer_type
+  ansible.builtin.debconf:
+    name: postfix
+    question: postfix/main_mailer_type
+    value: Local only
+    vtype: string
+  register: postfix_main_mailer_type
+
+- name: Set Postfix configuration - relayhost
+  ansible.builtin.debconf:
+    name: postfix
+    question: postfix/relayhost
+    value: "[127.0.0.1]:8025"
+    vtype: string
+  register: postfix_relayhost
+
 - name: Install open-mail-relay package
   ansible.builtin.apt:
     name: "{{ item }}"
     state: present
   with_items:
     - bsd-mailx
+    - postfix
   when: item not in ansible_facts.packages
 
-- name: Configure postfix to use local SMTP Server
-  ansible.builtin.lineinfile:
-    path: /etc/postfix/main.cf
-    state: present
-    regexp: ^relayhost
-    line: relayhost = [127.0.0.1]:8025
+- name: Set relayhost via postconf
+  ansible.builtin.command:
+    cmd: postconf -e "relayhost = [127.0.0.1]:8025"
+  register: postconf_relayhost_result
+  changed_when: postconf_relayhost_result.rc != 0
+
+- name: Set inet_interfaces via postconf
+  ansible.builtin.command:
+    cmd: postconf -e "inet_interfaces = loopback-only"
+  register: postconf_inet_interfaces_result
+  changed_when: postconf_inet_interfaces_result.rc != 0
 
 - name: Ensure the mail service is restarted
   ansible.builtin.service:
     name: postfix
     state: restarted
     enabled: true
+  when:
+    - postfix_main_mailer_type.changed
+    - postfix_relayhost.changed
+
+- name: Run manual check to validate that postfix is actually working as expected
+  ansible.builtin.command: postfix check
+  register: postfix_check_result
+  changed_when: false
+  ignore_errors: true
+
+- name: Cancel if postfix is broken
+  ansible.builtin.fail:
+    msg: |
+      Postfix-Check failed:
+      {{ postfix_check_result.stderr }}
+  when: postfix_check_result.rc != 0
